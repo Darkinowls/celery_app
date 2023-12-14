@@ -3,6 +3,6 @@
 */.venv/
 */db.sqlite3
 */celerybeat-schedule
-
+.env
 /.idea/vcs.xml
 
