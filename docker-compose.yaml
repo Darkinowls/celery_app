@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+
+  rabbit:
+    container_name: rabbit
+    image: rabbitmq:3.9.7-management-alpine
+    ports:
+      - "8003:15672" # webinterface
+      - "5672:5672" # port
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+
+  redis:
+    container_name: redis
+    image: redis:7.0.11-alpine
+    ports:
+      - "8002:6379"
+
+  celery:
+    depends_on: [ redis, rabbit ]
+    container_name: celery
+    build:
+      context: ./django_app/.
+    volumes:
+      - ./django_app:/app
+    environment:
+      - DEBUG=1
+      - SECRET_KEY=django-insecure-#(secret_key)
+      - ALLOWED_HOSTS=*
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - CELERY_BROKER_URL=amqp://guest:guest@rabbit:5672/
+    command: sh -c "celery --app=celery_app worker --hostname=celery --loglevel=info -Q tasks,dead_letter -E -B"
+
+  #  celery_alone:
+  #    depends_on: [ redis ]
+  #    container_name: celery_alone
+  #    build:
+  #      context: ./celery_worker/.
+  #    volumes:
+  #      - ./celery_worker:/app
+  #    environment:
+  #      - CELERY_BROKER_URL=redis://redis:6379/0
+  #      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+  #    command: sh -c "celery -A alone_celery_worker worker --loglevel=info -Q queue2"
+
+  flower:
+    image: mher/flower
+    container_name: flower
+    ports:
+      - "8004:5555"
+    environment:
+      - CELERY_BROKER_URL=amqp://guest:guest@rabbit:5672/
+
+  django:
+    depends_on: [ redis, celery, rabbit ]
+    container_name: django
+    build:
+      context: ./django_app/.
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./django_app:/app
+    environment:
+      - DEBUG=1
+      - SECRET_KEY=django-insecure-#(secret_key)
+      - ALLOWED_HOSTS=*
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - CELERY_BROKER_URL=amqp://guest:guest@rabbit:5672/
+    command: sh -c "python manage.py runserver 0.0.0.0:8000"
+
